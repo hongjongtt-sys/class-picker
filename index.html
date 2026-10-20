@@ -108,7 +108,10 @@ select{max-width:100%;min-width:0}
 .setup .seat.fixed .mk{color:var(--fixed-line)}
 .seat.sel{outline:3px solid var(--sel);outline-offset:2px;z-index:2}
 .seat .st{position:absolute;top:-13px;left:-9px;font-size:1.35rem;line-height:1;color:var(--star);text-shadow:0 0 2px var(--surface),0 0 2px var(--surface)}
-.seat.star{box-shadow:inset 0 0 0 3px var(--star)}
+.seat.starseat{background:var(--star-soft);border-style:dashed;border-color:var(--star)}
+.seat.starseat .nm{color:var(--star);font-family:var(--display);font-size:1.9rem}
+.starbar button.bump{border-color:var(--sel)}
+.starbar button.bump[aria-pressed="true"]{background:var(--sel);color:#fff}
 .starbar{display:flex;flex-direction:column;gap:8px;background:var(--star-soft);border-radius:10px;padding:12px 14px}
 .starbar .t{font-family:var(--display);font-size:1.15rem}
 .starbar .chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -173,7 +176,7 @@ select{max-width:100%;min-width:0}
 @media print{
   :root{--bg:#fff;--surface:#fff;--ink:#000;--cell:#000;--d0:#dcc8ea;--d1:#a9e4cd;--d2:#fdd0b1;--dn:#fff}
   header,.noprint,.panel,.legend,.msg,.starbar,.seat .st{display:none!important}
-  .seat.star{box-shadow:none}
+  .seat.starseat .nm{visibility:hidden}
   main .wrap{padding:0!important;max-width:none}
   .room{border:0;padding:0;border-radius:0;height:190mm;justify-content:center;gap:0;overflow:hidden}.layout,.layout.open{display:block}
   .sheetscroll{overflow:visible}.sheet{min-width:0;width:max-content;margin:0 auto}
@@ -361,7 +364,7 @@ select{max-width:100%;min-width:0}
         <span class="label">진행 방식</span>
         <label class="check"><input type="checkbox" id="revealMode"> 가려놓고 한 자리씩 클릭해서 공개</label>
         <div class="row"><span>★ 자리뺏기</span><input type="number" id="starCount" min="0" max="10" value="3" aria-label="별표 개수"><span>명</span></div>
-        <p class="hint">자리를 섞을 때 일반 학생 중 이 인원이 무작위로 ★가 됩니다. ★ 학생은 원하는 자리를 골라 그 자리 학생과 맞바꿉니다. 0으로 두면 끕니다. 고정석·앞자리 구역 학생은 ★가 되지 않고, 이들의 자리는 뺏을 수 없습니다.</p>
+        <p class="hint">자리를 섞으면 일반 학생 중 이 인원이 ★가 되어 대기석으로 가고, 그만큼 자리가 빈 ★ 자리로 남습니다. ★ 학생은 빈 ★ 자리에 앉거나 다른 학생의 자리를 뺏고, 뺏긴 학생은 남은 빈 ★ 자리를 고릅니다. 0으로 두면 끕니다. 고정석·앞자리 구역 학생은 ★가 되지 않고, 이들의 자리는 뺏을 수 없습니다.</p>
         <button class="btn small" id="clearSeats">배정 결과 지우기</button>
       </div>
     </aside>
@@ -464,14 +467,14 @@ $('#drawN').onchange=()=>store.set('drawN',+$('#drawN').value||1);
 const back=[0,1,4,5];
 const DEF={cols:6,rows:5,groups:[2,2,2],lect:'bottom',
   blocked:back,fixed:{},zone:[19,20,21,22,25,26,27,28],zoneStudents:[],pairs:[],result:null,reveal:false,shown:[],
-  starCount:3,stars:[],starDone:[],
+  starCount:3,stars:[],starSeats:[],waiting:[],
   text:{title:'☆바른 인성 2학년 3반 (10월) 좌석배치표☆',left:'복도',right:'운동장',foot:'수업을 방해하거나 불손한 학생이 있다면 담임(노홍종t)에게 말씀해주세요.'}};
 let S=Object.assign({},DEF,store.get('seat3',{}));S.text=Object.assign({},DEF.text,S.text||{});
 let tool='swap',setupMode=false,sel=null,starSel=null;
-if(!Array.isArray(S.stars))S.stars=[];if(!Array.isArray(S.starDone))S.starDone=[];
+if(!Array.isArray(S.stars))S.stars=[];if(!Array.isArray(S.starSeats))S.starSeats=[];if(!Array.isArray(S.waiting))S.waiting=[];
 $('#starCount').value=S.starCount;
 $('#starCount').onchange=()=>{S.starCount=Math.max(0,Math.min(10,+$('#starCount').value||0));$('#starCount').value=S.starCount;save()};
-const resetStars=()=>{S.stars=[];S.starDone=[];starSel=null};
+const resetStars=()=>{S.stars=[];S.starSeats=[];S.waiting=[];starSel=null};
 const save=()=>store.set('seat3',S);
 if(!Array.isArray(S.groups)||!S.groups.length){const g=[];if(S.pair!==false){let r=S.cols;while(r>0){g.push(Math.min(2,r));r-=2}}else g.push(S.cols);S.groups=g}
 S.cols=S.groups.reduce((a,b)=>a+b,0);
@@ -575,47 +578,68 @@ function setSwapMode(on){swapMode=on;sel=null;starSel=null;$('#swapBtn').setAttr
   if(on)setMsg('바꿀 두 자리를 차례로 누르세요. 빈자리와도 바꿀 수 있습니다.')}
 const who=n=>n?((numOf[n]!=null?numOf[n]+'번 ':'')+label(n)).trim():'빈자리';
 
-/* ── ★ 자리뺏기 ── */
-const seatOf=n=>{for(const k in S.result)if(S.result[k]===n)return +k;return -1};
+/* ── ★ 자리뺏기 (아이스크림 막대 방식) ──
+   S.stars: 이번 판 ★ 학생, S.starSeats: ★로 비워 둔 자리, S.waiting: 대기석 [{n:이름,k:'star'|'bump'}] */
+const seatIn=(res,n)=>{for(const k in res)if(res[k]===n)return +k;return -1};
+const seatOf=n=>seatIn(S.result||{},n);
 const allShown=()=>!S.reveal||Object.keys(S.result||{}).every(k=>S.shown.includes(+k));
-const starLeft=()=>S.stars.filter(n=>!S.starDone.includes(n));
-const starActive=()=>!!S.result&&starLeft().length>0&&allShown();
+const starActive=()=>!!S.result&&S.waiting.length>0&&allShown();
+const emptySeats=res=>{const e=[];for(let i=0;i<S.cols*S.rows;i++)if(!S.blocked.includes(i)&&!res[i])e.push(i);return e};
+const conflicts=(res,n,i)=>S.pairs.some(p=>{const o=p[0]===n?p[1]:p[1]===n?p[0]:null;if(o==null)return false;const j=seatIn(res,o);return j>=0&&j!==i&&adjacent(i,j)});
+function feasible(res,people){ // 대기석 학생이 모두 앉을 수 있는 빈자리가 남는지
+  const e=emptySeats(res);if(e.length<people.length)return false;
+  const r=Object.assign({},res);
+  const go=k=>{if(k===people.length)return true;const n=people[k];
+    for(const i of e){if(r[i]||conflicts(r,n,i))continue;r[i]=n;if(go(k+1))return true;delete r[i]}return false};
+  return go(0);
+}
 function pickStars(res){
   const fixedNames=Object.values(S.fixed);
   const pool=Object.values(res).filter(n=>!fixedNames.includes(n)&&!S.zoneStudents.includes(n));
-  S.stars=shuffle(pool).slice(0,Math.min(S.starCount,pool.length));S.starDone=[];starSel=null;
+  S.stars=shuffle(pool).slice(0,Math.min(S.starCount,pool.length));
+  S.starSeats=[];S.waiting=S.stars.map(n=>({n,k:'star'}));starSel=null;
+  for(const n of S.stars){const i=seatIn(res,n);if(i>=0){delete res[i];S.starSeats.push(i)}}
 }
+const guide=me=>me.k==='star'?`★ ${who(me.n)}: 빈 ★ 자리에 앉거나, 뺏고 싶은 자리를 누르세요.`:`${who(me.n)}: 남은 빈 ★ 자리 중 하나를 누르세요.`;
 function starClick(i){
-  const w=S.result[i];
-  if(starSel===null){
-    if(w&&starLeft().includes(w)){starSel=w;renderSeats();setMsg(`★ ${who(w)}: 뺏을 자리를 누르세요. 지금 자리를 다시 누르면 그대로 앉습니다.`)}
-    else setMsg('먼저 ★ 학생을 고르세요.');
-    return;
-  }
-  const from=seatOf(starSel);
-  if(i===from){S.starDone.push(starSel);const m=`★ ${who(starSel)}: 지금 자리에 그대로 앉습니다.`;starSel=null;save();renderSeats();setMsg(m);return}
+  if(starSel===null){setMsg('먼저 아래 대기석에서 학생을 고르세요.');return}
+  const me=S.waiting.find(x=>x.n===starSel);if(!me){starSel=null;return}
   if(S.blocked.includes(i))return;
-  const deny=()=>setMsg('이 자리는 뺏을 수 없어요. 다른 자리를 골라 주세요.',true);
-  if(S.fixed[i]||(w&&(S.zoneStudents.includes(w)||S.stars.includes(w))))return deny();
-  const next=Object.assign({},S.result);
-  next[i]=starSel;if(w)next[from]=w;else delete next[from];
-  const pos={};for(const k in next)pos[next[k]]=+k;
-  if(S.pairs.some(p=>pos[p[0]]!=null&&pos[p[1]]!=null&&adjacent(pos[p[0]],pos[p[1]])))return deny();
-  S.result=next;S.shown=Object.keys(next).map(Number);S.starDone.push(starSel);
-  const m=w?`★ ${who(starSel)} → ${who(w)}의 자리를 뺏었습니다! ${who(w)}은(는) ★ 학생이 앉았던 자리로 갑니다.`:`★ ${who(starSel)}이(가) 빈자리로 옮겼습니다.`;
-  starSel=null;save();renderSeats(i);setMsg(m);
+  const w=S.result[i],rest=S.waiting.filter(x=>x!==me);
+  const deny=t=>setMsg(t||'이 자리는 앉을 수 없어요. 다른 자리를 골라 주세요.',true);
+  let m;
+  if(!w){
+    if(conflicts(S.result,me.n,i))return deny();
+    const next=Object.assign({},S.result,{[i]:me.n});
+    if(!feasible(next,rest.map(x=>x.n)))return deny();
+    S.result=next;S.waiting=rest;starSel=null;
+    m=`${me.k==='star'?'★ ':''}${who(me.n)}이(가) 자리에 앉았습니다.`;
+  }else{
+    if(me.k!=='star')return deny('뺏긴 학생은 빈 ★ 자리에만 앉을 수 있어요.');
+    if(S.fixed[i]||S.zoneStudents.includes(w)||S.stars.includes(w))return deny('이 자리는 뺏을 수 없어요. 다른 자리를 골라 주세요.');
+    const tmp=Object.assign({},S.result);delete tmp[i];
+    if(conflicts(tmp,me.n,i))return deny('이 자리는 뺏을 수 없어요. 다른 자리를 골라 주세요.');
+    const next=Object.assign(tmp,{[i]:me.n});
+    if(!feasible(next,rest.map(x=>x.n).concat(w)))return deny('이 자리는 뺏을 수 없어요. 다른 자리를 골라 주세요.');
+    S.result=next;S.waiting=rest.concat({n:w,k:'bump'});starSel=w;
+    m=`★ ${who(me.n)} → ${who(w)}의 자리를 뺏었습니다! ${who(w)}은(는) 남은 빈 ★ 자리를 고르세요.`;
+  }
+  S.shown=Object.keys(S.result).map(Number);
+  if(!S.waiting.length)m+=' 자리뺏기가 끝났습니다.';
+  save();renderSeats(i);setMsg(m);
 }
 function renderStarBar(){
   const bar=$('#starBar');
   if(!S.result||!S.stars.length){bar.hidden=true;return}
-  bar.hidden=false;const left=starLeft().length;
+  bar.hidden=false;
   if(!allShown()){bar.innerHTML='<span class="t">모든 자리를 공개하면 ★ 자리뺏기를 시작합니다.</span>';return}
-  const t=!allShown()?'모든 자리를 공개하면 ★ 자리뺏기를 시작합니다.'
-    :left?(starSel?`★ ${who(starSel)} 차례: 뺏을 자리를 누르세요`:'★ 자리뺏기: 아래에서 ★ 학생을 고르세요'):'★ 자리뺏기가 끝났습니다';
-  bar.innerHTML=`<span class="t">${esc(t)}</span><div class="chips">${S.stars.map((n,k)=>{const done=S.starDone.includes(n);
-    return `<button data-k="${k}" class="${done?'done':''}" aria-pressed="${starSel===n}" ${done?'disabled':''}>★ ${esc(who(n))}${done?' · 완료':''}</button>`}).join('')}</div>`;
-  bar.querySelectorAll('button:not(.done)').forEach(b=>b.onclick=()=>{if(!allShown())return;const n=S.stars[+b.dataset.k];starSel=starSel===n?null:n;renderSeats();
-    if(starSel)setMsg(`★ ${who(starSel)}: 뺏을 자리를 누르세요. 지금 자리를 다시 누르면 그대로 앉습니다.`)});
+  if(!S.waiting.length){bar.innerHTML='<span class="t">★ 자리뺏기가 끝났습니다</span>';return}
+  const me=S.waiting.find(x=>x.n===starSel);
+  const t=me?(me.k==='star'?`★ ${who(me.n)} 차례: 빈 ★ 자리에 앉거나 뺏을 자리를 누르세요`:`${who(me.n)} 차례: 빈 ★ 자리를 누르세요`):'대기석: 학생을 누른 뒤 자리를 고르세요';
+  bar.innerHTML=`<span class="t">${esc(t)}</span><div class="chips">${S.waiting.map((x,k)=>
+    `<button data-k="${k}" class="${x.k}" aria-pressed="${starSel===x.n}">${x.k==='star'?'★':'↩'} ${esc(who(x.n))}${x.k==='bump'?' · 자리 뺏김':''}</button>`).join('')}</div>`;
+  bar.querySelectorAll('button').forEach(b=>b.onclick=()=>{const x=S.waiting[+b.dataset.k];starSel=starSel===x.n?null:x.n;renderSeats();
+    if(starSel)setMsg(guide(x))});
 }
 
 function renderSeats(popIdx){
@@ -637,9 +661,9 @@ function renderSeats(popIdx){
       if(w){
         if(!setupMode&&S.reveal&&!S.shown.includes(i)){cls+=' hiddenname';no='?';nm='?'}
         else{no=numOf[w]!=null?numOf[w]:'';nm=esc(label(w));
-          if(S.result&&S.stars.includes(w)&&!S.starDone.includes(w)&&allShown()){cls+=' star';st='<span class="st">★</span>'}
           if(starSel&&starSel===w)cls+=' sel'}
-      }else{cls+=' empty';nm=S.result?'빈자리':''}
+      }else if(S.result&&S.starSeats.includes(i)){cls+=' starseat';nm='★'}
+      else{cls+=' empty';nm=S.result?'빈자리':''}
     }
     if(sel===i)cls+=' sel';
     if(popIdx===i)cls+=' pop';
@@ -678,8 +702,8 @@ function assign(){
 let shuffling=false;
 $('#seatBtn').onclick=()=>{
   if(shuffling)return;const res=assign();if(!res)return;if(swapMode)setSwapMode(false);sel=null;
-  const done=()=>{S.result=res;S.shown=[];pickStars(res);save();renderSeats();shuffling=false;
-    if(S.stars.length&&allShown())setMsg(`★ ${S.stars.length}명이 나왔습니다! 아래에서 ★ 학생을 고르고 뺏을 자리를 누르세요.`)};
+  const done=()=>{pickStars(res);S.result=res;S.shown=[];save();renderSeats();shuffling=false;
+    if(S.stars.length&&allShown())setMsg(`★ ${S.stars.length}명이 나왔습니다! 대기석에서 ★ 학생을 누른 뒤, 빈 ★ 자리에 앉거나 뺏을 자리를 누르세요.`)};
   resetStars();
   if(reduce||(S.reveal&&!setupMode))return done();
   shuffling=true;const all=names();let t=0;
