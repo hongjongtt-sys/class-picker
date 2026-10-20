@@ -64,6 +64,7 @@ select{max-width:100%;min-width:0}
 .btn:hover{border-color:var(--accent)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface);font-family:var(--display);font-size:1.2rem;padding:12px 22px;font-weight:400}
 .btn.small{padding:5px 9px;font-size:.85rem}
+.btn.toggle[aria-pressed="true"]{background:var(--sel);border-color:var(--sel);color:#fff}
 .btn.gear{margin-left:auto;color:var(--muted)}
 .btn.gear[aria-expanded="true"]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
 .check{display:flex;gap:8px;align-items:center;cursor:pointer;font-size:.92rem}
@@ -290,6 +291,7 @@ select{max-width:100%;min-width:0}
       <div class="legend"><span class="lz">앞자리 구역</span><span class="lf">고정석</span><span class="lb">사용 안 함</span></div>
       <div class="row noprint">
         <button class="btn primary" id="seatBtn">자리 섞기</button>
+        <button class="btn toggle" id="swapBtn" aria-pressed="false">자리 바꾸기</button>
         <button class="btn" id="revealAll">모두 공개</button>
         <button class="btn" id="copySeats">결과 복사</button>
         <button class="btn" id="xlsxBtn">엑셀로 저장</button>
@@ -536,22 +538,13 @@ $('#addPair').onclick=()=>{const a=$('#pA').value,b=$('#pB').value;if(!a||!b||a=
   if(!S.pairs.some(p=>(p[0]===a&&p[1]===b)||(p[0]===b&&p[1]===a)))S.pairs.push([a,b]);save();renderPairs()};
 
 function seatClick(i){
-  if(!setupMode){ // 학생 화면: 공개, 그다음 ★ 자리뺏기
+  if(!setupMode){ // 학생 화면: 공개, 자리 바꾸기, ★ 자리뺏기
     if(S.result&&S.reveal&&!S.shown.includes(i)&&S.result[i]){S.shown.push(i);save();renderSeats(i);return}
+    if(swapMode)return swapClick(i);
     if(starActive())starClick(i);
     return;
   }
-  if(tool==='swap'){
-    if(S.blocked.includes(i))return;
-    if(sel===null){sel=i;renderSeats();return}
-    if(sel===i){sel=null;renderSeats();return}
-    if(!S.result)S.result={};
-    const a=S.result[sel],b=S.result[i];
-    if(b)S.result[sel]=b;else delete S.result[sel];
-    if(a)S.result[i]=a;else delete S.result[i];
-    const from=sel;sel=null;S.shown=Object.keys(S.result).map(Number);save();renderSeats(i);
-    setMsg(`${who(a)} ↔ ${who(b)} 자리를 바꿨습니다.`);return;
-  }
+  if(tool==='swap')return swapClick(i);
   if(tool==='block'){
     delete S.fixed[i];S.zone=S.zone.filter(x=>x!==i);
     S.blocked=S.blocked.includes(i)?S.blocked.filter(x=>x!==i):[...S.blocked,i];
@@ -566,6 +559,20 @@ function seatClick(i){
   }
   save();renderSeats();counts();
 }
+function swapClick(i){
+  if(S.blocked.includes(i))return;
+  if(sel===null){sel=i;renderSeats();setMsg(`${who(S.result&&S.result[i])} 선택됨. 바꿀 자리를 누르세요. 같은 자리를 다시 누르면 취소됩니다.`);return}
+  if(sel===i){sel=null;renderSeats();return}
+  if(!S.result)S.result={};
+  const a=S.result[sel],b=S.result[i];
+  if(b)S.result[sel]=b;else delete S.result[sel];
+  if(a)S.result[i]=a;else delete S.result[i];
+  sel=null;S.shown=Object.keys(S.result).map(Number);save();renderSeats(i);
+  setMsg(`${who(a)} ↔ ${who(b)} 자리를 바꿨습니다.`);
+}
+let swapMode=false;
+function setSwapMode(on){swapMode=on;sel=null;starSel=null;$('#swapBtn').setAttribute('aria-pressed',on);$('#swapBtn').textContent=on?'자리 바꾸기 끝내기':'자리 바꾸기';renderSeats();
+  if(on)setMsg('바꿀 두 자리를 차례로 누르세요. 빈자리와도 바꿀 수 있습니다.')}
 const who=n=>n?((numOf[n]!=null?numOf[n]+'번 ':'')+label(n)).trim():'빈자리';
 
 /* ── ★ 자리뺏기 ── */
@@ -670,7 +677,7 @@ function assign(){
 }
 let shuffling=false;
 $('#seatBtn').onclick=()=>{
-  if(shuffling)return;const res=assign();if(!res)return;sel=null;
+  if(shuffling)return;const res=assign();if(!res)return;if(swapMode)setSwapMode(false);sel=null;
   const done=()=>{S.result=res;S.shown=[];pickStars(res);save();renderSeats();shuffling=false;
     if(S.stars.length&&allShown())setMsg(`★ ${S.stars.length}명이 나왔습니다! 아래에서 ★ 학생을 고르고 뺏을 자리를 누르세요.`)};
   resetStars();
@@ -867,6 +874,7 @@ $('#resetTurns').onclick=()=>{B.done=[];B.current=null;nextTurn();bsave();render
 if(!B.board.length||B.board.length!==B.cells)deal();
 
 /* 처음 */
+$('#swapBtn').onclick=()=>setSwapMode(!swapMode);
 setTool('swap');renderText();onNames();nextTurn();renderBoardAll();renderHistory();setTab(store.get('tab','draw'));
 })();
 </script>
