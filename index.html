@@ -162,7 +162,7 @@ select{max-width:100%;min-width:0}
 .tk.open.c0{color:var(--muted)}
 .tk.tear{animation:tear .45s ease-out}
 @keyframes tear{0%{transform:rotateY(90deg) scale(.9)}100%{transform:none}}
-.pop{position:fixed;inset:0;background:rgba(10,20,16,.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+.bpop{position:fixed;inset:0;background:rgba(10,20,16,.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
 .popcard{background:var(--surface);color:var(--ink);border-radius:18px;padding:28px 40px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;min-width:min(420px,100%);animation:popin .4s cubic-bezier(.2,1.4,.4,1)}
 @keyframes popin{0%{transform:scale(.6);opacity:0}100%{transform:none;opacity:1}}
 .pwho{color:var(--muted);font-size:1.05rem}
@@ -264,7 +264,7 @@ select{max-width:100%;min-width:0}
       </div>
     </aside>
   </div>
-  <div class="pop" id="pop" hidden>
+  <div class="bpop" id="pop" hidden>
     <div class="popcard" id="popCard" role="dialog" aria-live="assertive">
       <div class="pwho" id="pWho"></div>
       <div class="prank" id="pRank"></div>
