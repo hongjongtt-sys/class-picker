@@ -123,7 +123,7 @@ select{max-width:100%;min-width:0}
 .lectern{border:1.5px solid var(--cell);font-family:var(--hand);font-weight:700;font-size:1.45rem;text-align:center;padding:6px 0;width:min(100%,420px)}
 .foot{align-self:stretch;font-family:var(--hand);font-weight:700;font-size:1.15rem;padding-left:20px}
 .foot:not(:empty)::before{content:"▸ ";font-size:.9em}
-.top .lectern{order:-1}
+.top .ttl{order:-2}.top .lectern{order:-1}
 .legend{display:none;flex-wrap:wrap;gap:14px;font-size:.82rem;color:var(--muted)}
 .setup .legend{display:flex}
 .legend span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px;border:3px solid var(--line)}
@@ -341,7 +341,8 @@ select{max-width:100%;min-width:0}
         <p class="hint" id="groupsHint">예: 2,2,2 → 2명씩 3분단 · 1,1,1,1,1,1 → 1명씩 6분단 · 6 → 분단 없이 한 덩어리</p>
         <div class="row"><span>세로</span><input type="number" id="rows" min="1" max="10" value="5" aria-label="세로 줄 수"><span>줄</span></div>
         <label class="hint" for="lectPos">교탁 위치</label>
-        <select id="lectPos"><option value="bottom">아래 (교사 시점, 인쇄용)</option><option value="top">위 (학생 시점)</option></select>
+        <select id="lectPos"><option value="bottom">아래 (교사 시점)</option><option value="top">위 (학생 시점)</option></select>
+        <p class="hint">화면에서 보이는 방향입니다. 인쇄는 항상 교사 시점(교탁이 아래)으로 나옵니다.</p>
       </div>
 
       <div class="sec">
@@ -470,7 +471,9 @@ const DEF={cols:6,rows:5,groups:[2,2,2],lect:'bottom',
   starCount:3,stars:[],starSeats:[],waiting:[],
   text:{title:'☆바른 인성 2학년 3반 (10월) 좌석배치표☆',left:'복도',right:'운동장',foot:'수업을 방해하거나 불손한 학생이 있다면 담임(노홍종t)에게 말씀해주세요.'}};
 let S=Object.assign({},DEF,store.get('seat3',{}));S.text=Object.assign({},DEF.text,S.text||{});
-let tool='swap',setupMode=false,sel=null,starSel=null;
+let tool='swap',setupMode=false,sel=null,starSel=null,printing=false;
+/* 화면은 설정대로, 인쇄할 때는 항상 교사 시점(교탁 아래, 180도 돌린 모양) */
+const isTop=()=>S.lect==='top'&&!printing;
 if(!Array.isArray(S.stars))S.stars=[];if(!Array.isArray(S.starSeats))S.starSeats=[];if(!Array.isArray(S.waiting))S.waiting=[];
 $('#starCount').value=S.starCount;
 $('#starCount').onchange=()=>{S.starCount=Math.max(0,Math.min(10,+$('#starCount').value||0));$('#starCount').value=S.starCount;save()};
@@ -482,7 +485,7 @@ $('#groupsIn').value=S.groups.join(',');$('#rows').value=S.rows;$('#revealMode')
 [['txTitle','title'],['txLeft','left'],['txRight','right'],['txFoot','foot']].forEach(([id,k])=>{const el=$('#'+id);el.value=S.text[k];el.oninput=()=>{S.text[k]=el.value;save();renderText()}});
 function renderText(){
   $('#tTitle').textContent=S.text.title;$('#tTitle').hidden=!S.text.title;
-  const top=S.lect==='top';
+  const top=isTop();
   const L=top?S.text.right:S.text.left,R=top?S.text.left:S.text.right;
   $('#sideL').textContent=L;$('#sideL').hidden=!L;$('#sideR').textContent=R;$('#sideR').hidden=!R;
   $('#tFoot').textContent=S.text.foot;
@@ -643,7 +646,7 @@ function renderStarBar(){
 }
 
 function renderSeats(popIdx){
-  const wrap=$('#seats');const {cols,rows}=S,top=S.lect==='top';
+  const wrap=$('#seats');const {cols,rows}=S,top=isTop();
   names();
   const tracks=[];for(let dc=0;dc<cols;dc++){tracks.push('auto');if(aisleAfter(dc,top))tracks.push('56px')}
   wrap.style.gridTemplateColumns=tracks.join(' ');
@@ -731,17 +734,18 @@ let framed=true;try{framed=window.self!==window.top}catch(e){}
 const BLOCKED_MSG='이 미리보기 화면에서는 저장·인쇄가 막혀 있습니다. GitHub Pages 주소나 내 컴퓨터에 받은 파일로 열면 됩니다.';
 /* 인쇄할 때 좌석표를 A4 가로 한 장에 맞춰 줄이기 */
 function fitPrint(){
+  if(!printing){printing=true;renderText();renderSeats()}
   const sh=$('#sheet');sh.style.zoom='';
   if($('#view-seat').hidden)return;
   const w=sh.scrollWidth,h=sh.scrollHeight;if(!w||!h)return;
   const mm=96/25.4,W=(297-16)*mm-8,H=190*mm-8;
   const z=Math.min(1,W/w,H/h);if(z<1)sh.style.zoom=z.toFixed(3);
 }
-const unfitPrint=()=>{$('#sheet').style.zoom=''};
+const unfitPrint=()=>{$('#sheet').style.zoom='';if(printing){printing=false;renderText();renderSeats()}};
 window.addEventListener('beforeprint',fitPrint);window.addEventListener('afterprint',unfitPrint);
 $('#printBtn').onclick=()=>{
   if(framed)return setMsg(BLOCKED_MSG,true);
-  const was=setupMode;setupMode=false;renderSeats();window.print();setupMode=was;renderSeats();
+  const was=setupMode;setupMode=false;printing=true;renderText();renderSeats();window.print();setupMode=was;printing=false;renderText();renderSeats();
 };
 
 function loadExcelJS(){
