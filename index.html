@@ -391,12 +391,14 @@ select{max-width:100%;min-width:0}
     <div class="row">
       <button class="btn primary" id="pGo">✈ 다 같이 날리기</button>
       <button class="btn" id="pReset">처음부터</button>
+      <button class="btn" id="pXlsx">엑셀로 저장</button>
+      <button class="btn" id="pPrint">인쇄</button>
       <button class="btn" id="pFull">전체 화면</button>
       <div class="seg pspeed" role="group" aria-label="빠르기"><button data-s="1" aria-pressed="true">보통</button><button data-s="1.8" aria-pressed="false">빠르게</button></div>
       <label class="phold" for="pHold">끝까지 남길 학생 <input type="number" id="pHold" min="0" max="5" value="2"> 명</label>
     </div>
     <p class="msg" id="pMsg"></p>
-    <p class="hint">자리 정하는 규칙(고정석, 앞자리 구역, 떨어뜨릴 학생, ★ 인원)은 자리배정 탭의 교사 설정을 그대로 씁니다. 날린 결과는 자리배정 탭에도 들어가므로 거기서 인쇄·엑셀 저장을 하면 됩니다.</p>
+    <p class="hint">자리 정하는 규칙(고정석, 앞자리 구역, 떨어뜨릴 학생, ★ 인원)은 자리배정 탭의 교사 설정을 그대로 씁니다. 날린 결과는 자리배정 탭에도 들어가고, 인쇄·엑셀은 자리배정 탭과 똑같이 나옵니다.</p>
   </div>
 </section>
 
@@ -1091,7 +1093,7 @@ const Plane=(()=>{
     for(const m of marks)scene.remove(m.s);marks=[];queue=[];holds=[];starSel=null}
   function reset(){
     if(!ready)return;clearAll();phase='idle';names();lay=layout();buildRoom();
-    chalk('오늘의 자리는?','다 같이 날려 보세요');$('#pGo').disabled=false;
+    chalk('오늘의 자리는?','다 같이 날려 보세요');$('#pGo').disabled=false;outBtns();
     msg(`학생 ${names().length}명 · ★ ${S.starCount}명 · 끝까지 남길 학생 ${holdN()}명`);
   }
 
@@ -1109,7 +1111,7 @@ const Plane=(()=>{
     shuffle(fliers).forEach((n,k)=>{const p=makePlane(n,S.stars.includes(n)?'star':holds.includes(n)?'hold':'normal');
       p.mode='launch';p.from=new T.Vector3((Math.random()-.5)*(lay.width+2),.4+Math.random()*.6,lay.back+1.5+Math.random()*1.4);p.t=-k*.05;p.dur=2.2});
     queue=shuffle(seated.filter(x=>!holds.includes(x.n)).map(x=>x.n));
-    peelAt=2.6;phase='fly';$('#pGo').disabled=true;chalk('다 같이 출발!','');msg('');
+    peelAt=2.6;phase='fly';$('#pGo').disabled=true;outBtns();chalk('다 같이 출발!','');msg('');
   }
   function afterNormals(){
     if(planes.some(p=>p.kind==='hold')){phase='hold';
@@ -1130,7 +1132,12 @@ const Plane=(()=>{
       chalk((me.k==='star'?'★ ':'↩ ')+who(me.n),me.k==='star'?'빈 ★ 자리, 아니면 뺏을 자리를 누르세요':'남은 빈 ★ 자리를 누르세요')}
     else{chalk('★ 자리뺏기','★ 비행기를 누르세요');msg('★ 비행기를 누른 뒤, 빈 ★ 자리에 앉히거나 뺏을 자리를 누르세요.')}
   }
-  function finish(){phase='done';chalk('모두 앉았어요!','');msg('자리 공개가 끝났습니다. 자리배정 탭에서 인쇄·엑셀 저장을 하면 됩니다.');starSel=null;renderSeats()}
+  function finish(){phase='done';chalk('모두 앉았어요!','');msg('자리 공개가 끝났습니다. 아래 인쇄·엑셀로 저장을 누르면 자리배정 탭과 같은 표가 나옵니다.');starSel=null;renderSeats();outBtns()}
+  /* 인쇄·엑셀: 자리배정 탭의 기능을 그대로 부른다. 공개 중에는 결과가 미리 보이지 않게 막음 */
+  function outBtns(){const ok=!!S.result&&(phase==='done'||(phase==='idle'&&!S.waiting.length));$('#pXlsx').disabled=$('#pPrint').disabled=!ok}
+  $('#pXlsx').onclick=()=>{const ob=new MutationObserver(()=>{const t=$('#seatMsg').textContent;msg(t);if(!/만드는 중/.test(t))ob.disconnect()});
+    ob.observe($('#seatMsg'),{childList:true,characterData:true,subtree:true});$('#xlsxBtn').click()};
+  $('#pPrint').onclick=()=>{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});setTab('seat');$('#printBtn').click();setTab('plane')};
 
   function clickPlane(n){
     const p=planes.find(x=>x.n===n);if(!p||p.mode!=='orbit')return;
@@ -1197,7 +1204,7 @@ const Plane=(()=>{
       try{await load()}catch(e){$('#pWait').textContent='3D 도구를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.';loading=false;return}
       try{init()}catch(e){$('#pWait').textContent='이 컴퓨터에서는 3D 화면을 열 수 없습니다. 자리배정 탭을 써 주세요.';loading=false;return}
       $('#pWait').hidden=true;if(document.fonts)await document.fonts.ready;reset()}
-    else if(phase==='idle'||phase==='done')reset();
+    else if(phase==='idle')reset();
     if(!running){running=true;last=performance.now();requestAnimationFrame(tick)}
   }
   function hide(){running=false}
