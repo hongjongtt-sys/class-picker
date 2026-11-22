@@ -179,6 +179,7 @@ select{max-width:100%;min-width:0}
 .pview .pwait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;color:#5f6b65;font-size:1rem}
 .pstage:fullscreen{background:var(--bg);padding:12px}
 .pstage:fullscreen .pview{height:calc(100vh - 90px)}
+.pstage .btn:disabled{opacity:.45;cursor:default}
 .pspeed{display:inline-grid;grid-template-columns:repeat(2,auto)}
 .pspeed button{padding:8px 14px}
 .phold{display:flex;align-items:center;gap:6px;font-size:.9rem;color:var(--muted)}
@@ -1058,21 +1059,23 @@ const Plane=(()=>{
     const t=tex(c);t.anisotropy=4;
     const m=new T.Mesh(new T.PlaneGeometry(1.25,.62),new T.MeshStandardMaterial({map:t,roughness:.8,side:T.DoubleSide}));m.castShadow=true;return m}
   function tag(text,bgc){
-    const[c,g]=canvas(360,110);g.fillStyle=bgc;const r=50;g.beginPath();g.moveTo(r,6);g.arcTo(354,6,354,104,r);g.arcTo(354,104,6,104,r);g.arcTo(6,104,6,6,r);g.arcTo(6,6,354,6,r);g.fill();
-    g.fillStyle='#1d2622';g.font='64px "Do Hyeon", sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(text,180,60,330);
-    const s=new T.Sprite(new T.SpriteMaterial({map:tex(c),depthTest:false}));s.scale.set(1.3,.4,1);s.renderOrder=5;return s}
+    const W=text.length<=2?130:360;
+    const[c,g]=canvas(W,110);g.fillStyle=bgc;const r=50;g.beginPath();g.moveTo(r,6);g.arcTo(W-6,6,W-6,104,r);g.arcTo(W-6,104,6,104,r);g.arcTo(6,104,6,6,r);g.arcTo(6,6,W-6,6,r);g.fill();
+    g.fillStyle='#1d2622';g.font='64px "Do Hyeon", sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(text,W/2,60,W-30);
+    const s=new T.Sprite(new T.SpriteMaterial({map:tex(c),depthTest:false}));s.scale.set(1.3*W/360,.4,1);s.renderOrder=5;return s}
 
   /* 비행기 */
   const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
   const orbit=(ph,h)=>new T.Vector3(Math.cos(ph)*(lay.width/2+.4),3.3+h*.7,lay.midZ+2.2+Math.sin(ph)*2.2);
-  const tagText=(kind,n)=>(kind==='star'?'★ ':kind==='bump'?'↩ ':'? ')+who(n);
+  // ?·★ 비행기는 누를 때까지 번호·이름을 숨긴다(뺏긴 학생은 이미 알려졌으므로 보임)
+  const tagText=(kind,n,open)=>{const s=kind==='star'?'★':kind==='bump'?'↩':'?';return open?s+' '+who(n):s};
   function makePlane(n,kind){
     const mesh=new T.Mesh(PG,PM.clone());mesh.castShadow=true;mesh.scale.setScalar(1.05);scene.add(mesh);
     const hit=new T.Mesh(new T.SphereGeometry(.75,8,6),new T.MeshBasicMaterial({visible:false}));hit.userData.plane=n;mesh.add(hit);
-    const p={n,kind,mesh,hit,tag:null,mode:'orbit',ph:Math.random()*Math.PI*2,h:(Math.random()-.5)*1.2,w:.55+Math.random()*.25,from:null,curve:null,t:0,dur:1,wob:Math.random()*6,onEnd:null};
+    const p={n,kind,open:kind==='bump',mesh,hit,tag:null,mode:'orbit',ph:Math.random()*Math.PI*2,h:(Math.random()-.5)*1.2,w:.55+Math.random()*.25,from:null,curve:null,t:0,dur:1,wob:Math.random()*6,onEnd:null};
     setKind(p,kind);planes.push(p);return p}
   function setKind(p,kind){p.kind=kind;if(p.tag){scene.remove(p.tag);p.tag=null}
-    if(kind!=='normal'){p.tag=tag(tagText(kind,p.n),kind==='hold'?'#ffffff':'#f2d36b');scene.add(p.tag)}}
+    if(kind!=='normal'){p.tag=tag(tagText(kind,p.n,p.open),kind==='hold'?'#ffffff':'#f2d36b');scene.add(p.tag)}}
   function removePlane(p){scene.remove(p.mesh);if(p.tag)scene.remove(p.tag);planes=planes.filter(x=>x!==p)}
   function flyTo(p,pts,dur,onEnd){p.curve=new T.CatmullRomCurve3([p.mesh.position.clone(),...pts],false,'centripetal');p.mode='fly';p.t=0;p.dur=dur;p.onEnd=onEnd}
   function route(p,i,fake){
@@ -1085,7 +1088,7 @@ const Plane=(()=>{
     const m=nameCard(n,colorOf(i)),p=seatPos(i);m.position.set(p.x,DH+.36,p.z+.02);m.lookAt(CAM.x,DH+.36,CAM.z);m.rotateX(-.28);m.scale.setScalar(.01);scene.add(m);cards[i]={m,t:0,i}}
   function knock(i){const c=cards[i];if(!c)return;delete cards[i];c.t=0;knocked.push(c)}
   function glow(i){const t=deskTop[i];if(!t)return;t.material.emissive=lin(0xf2d36b);t.material.emissiveIntensity=.55;setTimeout(()=>{t.material.emissiveIntensity=0},900/speed)}
-  function mark(i){const s=tag('★','#f2d36b'),p=seatPos(i);s.scale.set(.5,.42,1);s.position.set(p.x,DH+.55,p.z);scene.add(s);marks.push({i,s,y:DH+.55})}
+  function mark(i){const s=tag('★','#f2d36b'),p=seatPos(i);s.position.set(p.x,DH+.55,p.z);scene.add(s);marks.push({i,s,y:DH+.55})}
   function unmark(i){marks=marks.filter(m=>{if(m.i===i){scene.remove(m.s);return false}return true})}
 
   function clearAll(){for(const p of planes){scene.remove(p.mesh);if(p.tag)scene.remove(p.tag)}planes=[];
@@ -1116,7 +1119,7 @@ const Plane=(()=>{
   function afterNormals(){
     if(planes.some(p=>p.kind==='hold')){phase='hold';
       chalk('아직 하늘에 '+planes.filter(p=>p.kind==='hold').length+'대!','빈 책상 중 어디일까? ? 비행기를 눌러 보세요');
-      msg('? 비행기를 누르면 빈 책상들 위를 맴돌다 자기 자리에 내려앉습니다.')}
+      msg('? 비행기를 누르면 누구인지 나오고, 빈 책상들 위를 맴돌다 자기 자리에 내려앉습니다.')}
     else revealStars()}
   function revealStars(){
     const open=S.starSeats.filter(i=>!S.result[i]);
@@ -1130,7 +1133,7 @@ const Plane=(()=>{
     const me=S.waiting.find(x=>x.n===starSel);
     if(me){const p=planes.find(x=>x.n===me.n);if(p){p.mesh.material.emissive=lin(0xe0533a);p.mesh.material.emissiveIntensity=.6}
       chalk((me.k==='star'?'★ ':'↩ ')+who(me.n),me.k==='star'?'빈 ★ 자리, 아니면 뺏을 자리를 누르세요':'남은 빈 ★ 자리를 누르세요')}
-    else{chalk('★ 자리뺏기','★ 비행기를 누르세요');msg('★ 비행기를 누른 뒤, 빈 ★ 자리에 앉히거나 뺏을 자리를 누르세요.')}
+    else{chalk('★ 자리뺏기','★ 비행기를 누르면 누구인지 나와요');msg('★ 비행기를 누르면 누구인지 나옵니다. 그다음 빈 ★ 자리나 바꿀 자리를 누르세요.')}
   }
   function finish(){phase='done';chalk('모두 앉았어요!','');msg('자리 공개가 끝났습니다. 아래 인쇄·엑셀로 저장을 누르면 자리배정 탭과 같은 표가 나옵니다.');starSel=null;renderSeats();outBtns()}
   /* 인쇄·엑셀: 자리배정 탭의 기능을 그대로 부른다. 공개 중에는 결과가 미리 보이지 않게 막음 */
@@ -1142,10 +1145,10 @@ const Plane=(()=>{
   function clickPlane(n){
     const p=planes.find(x=>x.n===n);if(!p||p.mode!=='orbit')return;
     if(phase==='hold'&&p.kind==='hold'){
-      const i=seatOf(n);chalk('? '+who(n),'어디로 갈까…');p.kind='landing';
+      const i=seatOf(n);p.open=true;setKind(p,'hold');chalk('? '+who(n),'어디로 갈까…');p.kind='landing';
       landOn(p,i,3.6,true,()=>{chalk(who(n)+' 자리, 여기!','');
         if(!planes.some(x=>x.kind==='hold'||x.kind==='landing'))setTimeout(revealStars,900/speed)});
-    }else if(phase==='star'&&(p.kind==='star'||p.kind==='bump')){starSel=n;msg('');starTurn()}
+    }else if(phase==='star'&&(p.kind==='star'||p.kind==='bump')){if(!p.open){p.open=true;setKind(p,p.kind)}starSel=n;msg('');starTurn()}
   }
   function clickSeat(i){
     if(phase!=='star'||!starSel)return;
